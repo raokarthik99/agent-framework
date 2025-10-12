@@ -13,6 +13,7 @@ from typing import Annotated
 from agent_framework import ChatAgent, Executor, WorkflowBuilder, WorkflowContext, handler
 from agent_framework.azure import AzureOpenAIChatClient
 from agent_framework.devui import serve
+from azure.identity import AzureCliCredential
 from typing_extensions import Never
 
 
@@ -65,10 +66,7 @@ def main():
 
     # Create Azure OpenAI chat client
     chat_client = AzureOpenAIChatClient(
-        api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
-        azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
-        api_version=os.environ.get("AZURE_OPENAI_API_VERSION", "2024-10-21"),
-        model_id=os.environ.get("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME", "gpt-4o"),
+        credential=AzureCliCredential()
     )
 
     # Create agents

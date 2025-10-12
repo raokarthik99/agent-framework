@@ -29,6 +29,7 @@ from agent_framework import (
 )
 from pydantic import BaseModel, Field
 from typing_extensions import Never
+from azure.identity import AzureCliCredential
 
 
 @dataclass

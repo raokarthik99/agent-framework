@@ -6,6 +6,7 @@
 import { Button } from "@/components/ui/button";
 import { EntitySelector } from "./entity-selector";
 import { ModeToggle } from "@/components/mode-toggle";
+import { UserMenu } from "@/components/auth/user-menu";
 import { Settings } from "lucide-react";
 import type { AgentInfo, WorkflowInfo } from "@/types";
 
@@ -72,6 +73,7 @@ export function AppHeader({
       />
 
       <div className="flex items-center gap-2 ml-auto">
+        <UserMenu />
         <ModeToggle />
         <Button variant="ghost" size="sm" onClick={(e: React.MouseEvent) => { e.stopPropagation(); onSettingsClick?.(); }}>
           <Settings className="h-4 w-4" />

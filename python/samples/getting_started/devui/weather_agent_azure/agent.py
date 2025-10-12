@@ -16,6 +16,7 @@ from agent_framework import (
     function_middleware,
 )
 from agent_framework.azure import AzureOpenAIChatClient
+from azure.identity import AzureCliCredential
 
 
 @chat_middleware
@@ -104,7 +105,7 @@ agent = ChatAgent(
     weather information when asked.
     """,
     chat_client=AzureOpenAIChatClient(
-        api_key=os.environ.get("AZURE_OPENAI_API_KEY", ""),
+        credential=AzureCliCredential()
     ),
     tools=[get_weather, get_forecast],
     middleware=[security_filter_middleware, atlantis_location_filter_middleware],

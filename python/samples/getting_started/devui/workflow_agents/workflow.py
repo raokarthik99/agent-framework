@@ -20,6 +20,7 @@ from typing import Any
 from agent_framework import AgentExecutorResponse, WorkflowBuilder
 from agent_framework.azure import AzureOpenAIChatClient
 from pydantic import BaseModel
+from azure.identity import AzureCliCredential
 
 
 # Define structured output for review results
@@ -59,7 +60,7 @@ def is_approved(message: Any) -> bool:
 
 
 # Create Azure OpenAI chat client
-chat_client = AzureOpenAIChatClient(api_key=os.environ.get("AZURE_OPENAI_API_KEY", ""))
+chat_client = AzureOpenAIChatClient(credential=AzureCliCredential())
 
 # Create Writer agent - generates content
 writer = chat_client.create_agent(
