@@ -23,11 +23,16 @@ interface SettingsModalProps {
 
 type Tab = "about" | "settings";
 
-export function SettingsModal({ open, onOpenChange, onBackendUrlChange }: SettingsModalProps) {
+export function SettingsModal({
+  open,
+  onOpenChange,
+  onBackendUrlChange,
+}: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>("about");
 
   // Get current backend URL from localStorage or default
-  const defaultUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+  const defaultUrl =
+    import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8080";
   const [backendUrl, setBackendUrl] = useState(() => {
     return localStorage.getItem("devui_backend_url") || defaultUrl;
   });
@@ -45,7 +50,7 @@ export function SettingsModal({ open, onOpenChange, onBackendUrlChange }: Settin
       // Reload to apply new backend URL
       window.location.reload();
     } catch {
-      alert("Please enter a valid URL (e.g., http://localhost:8080)");
+      alert("Please enter a valid URL (e.g., http://127.0.0.1:8080)");
     }
   };
 
@@ -155,7 +160,7 @@ export function SettingsModal({ open, onOpenChange, onBackendUrlChange }: Settin
                   type="url"
                   value={tempUrl}
                   onChange={(e) => setTempUrl(e.target.value)}
-                  placeholder="http://localhost:8080"
+                  placeholder="http://127.0.0.1:8080"
                   className="font-mono text-sm"
                 />
 
@@ -167,11 +172,7 @@ export function SettingsModal({ open, onOpenChange, onBackendUrlChange }: Settin
                 <div className="flex gap-2 pt-2 min-h-[36px]">
                   {isModified && (
                     <>
-                      <Button
-                        onClick={handleSave}
-                        size="sm"
-                        className="flex-1"
-                      >
+                      <Button onClick={handleSave} size="sm" className="flex-1">
                         Apply & Reload
                       </Button>
                       <Button

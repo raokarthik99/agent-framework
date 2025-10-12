@@ -8,12 +8,13 @@ yarn install
 
 # Create .env.local with backend URL and Microsoft Entra settings
 cat <<'EOF' > .env.local
-VITE_API_BASE_URL=http://localhost:8080
+VITE_API_BASE_URL=http://127.0.0.1:8080
 VITE_AZURE_AD_CLIENT_ID=<your-app-client-id>
 VITE_AZURE_AD_TENANT_ID=<your-tenant-id>
 VITE_AZURE_AD_REDIRECT_URI=http://localhost:5173/auth/callback
 VITE_AZURE_AD_POST_LOGOUT_REDIRECT_URI=http://localhost:5173/auth/callback
 VITE_GRAPH_SCOPES=User.Read
+VITE_AZURE_AD_API_SCOPES=api://<your-api-client-id>/.default
 EOF
 
 # Create .env.production (empty for relative URLs)
@@ -38,8 +39,9 @@ This project now requires Microsoft Entra ID (Azure AD) authentication before ac
 - Copy the values into `.env.local` as shown above. You can also set:
   - `VITE_AZURE_AD_AUTHORITY` if you need a custom authority URL (e.g., for national clouds or B2C).
   - `VITE_GRAPH_SCOPES` to request additional Graph scopes (comma or space separated).
+  - `VITE_AZURE_AD_API_SCOPES` with the backend API scope(s) you expose (space or comma separated). Use an `.default` scope when consent is handled centrally.
 
-On sign-in, the app requests a Microsoft identity token and silently retrieves a Microsoft Graph access token to personalize the experience and power the sign-out menu.
+On sign-in, the app requests a Microsoft identity token and silently retrieves both Microsoft Graph and backend API access tokens. Graph enables personalization, while the backend scope secures every DevUI API call automatically.
 
 ## Expanding the ESLint configuration
 

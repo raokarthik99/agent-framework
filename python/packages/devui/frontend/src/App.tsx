@@ -383,7 +383,7 @@ export default function App() {
 
               <p className="text-xs text-muted-foreground">
                 Default:{" "}
-                <span className="font-mono">http://localhost:8080</span>
+                <span className="font-mono">http://127.0.0.1:8080</span>
               </p>
             </div>
 
@@ -486,7 +486,9 @@ export default function App() {
                 {/* Resize Handle */}
                 <div
                   className={`w-1 cursor-col-resize flex-shrink-0 relative group transition-colors duration-200 ease-in-out ${
-                    isResizing ? "bg-primary/40" : "bg-border hover:bg-primary/20"
+                    isResizing
+                      ? "bg-primary/40"
+                      : "bg-border hover:bg-primary/20"
                   }`}
                   onMouseDown={handleMouseDown}
                 >

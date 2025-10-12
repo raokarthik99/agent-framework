@@ -53,10 +53,12 @@ interface ConversationApiResponse {
   metadata?: Record<string, string>;
 }
 
+type AuthTokenProvider = () => Promise<string | null | undefined>;
+
 const DEFAULT_API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL !== undefined
     ? import.meta.env.VITE_API_BASE_URL
-    : "http://localhost:8080";
+    : "http://127.0.0.1:8080";
 
 // Get backend URL from localStorage or default
 function getBackendUrl(): string {
@@ -65,6 +67,7 @@ function getBackendUrl(): string {
 
 class ApiClient {
   private baseUrl: string;
+  private authProvider?: AuthTokenProvider;
 
   constructor(baseUrl?: string) {
     this.baseUrl = baseUrl || getBackendUrl();
@@ -79,19 +82,50 @@ class ApiClient {
     return this.baseUrl;
   }
 
+  setAuthProvider(provider?: AuthTokenProvider) {
+    this.authProvider = provider;
+  }
+
+  clearAuthProvider(provider?: AuthTokenProvider) {
+    if (!provider || this.authProvider === provider) {
+      this.authProvider = undefined;
+    }
+  }
+
+  private async authorizedFetch(
+    input: string,
+    init: RequestInit = {}
+  ): Promise<Response> {
+    const headers = new Headers(init.headers ?? {});
+
+    if (
+      !(init.body instanceof FormData) &&
+      !headers.has("Content-Type") &&
+      init.method &&
+      init.method.toUpperCase() !== "GET"
+    ) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    if (this.authProvider) {
+      const token = await this.authProvider();
+      if (token) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
+    }
+
+    return fetch(input, {
+      ...init,
+      headers,
+    });
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-
-    const response = await fetch(url, {
-      headers: {
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
-      ...options,
-    });
+    const response = await this.authorizedFetch(url, options);
 
     if (!response.ok) {
       // Try to extract error message from response body
@@ -316,15 +350,17 @@ class ApiClient {
     _agentId: string,
     openAIRequest: AgentFrameworkRequest
   ): AsyncGenerator<ExtendedResponseStreamEvent, void, unknown> {
-
-    const response = await fetch(`${this.baseUrl}/v1/responses`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-      },
-      body: JSON.stringify(openAIRequest),
-    });
+    const response = await this.authorizedFetch(
+      `${this.baseUrl}/v1/responses`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
+        body: JSON.stringify(openAIRequest),
+      }
+    );
 
     if (!response.ok) {
       // Try to extract detailed error message from response body
@@ -396,21 +432,25 @@ class ApiClient {
     // Convert to OpenAI format - use model field for entity_id (same as agents)
     const openAIRequest: AgentFrameworkRequest = {
       model: workflowId, // Use workflow ID in model field (matches agent pattern)
-      input: typeof request.input_data === 'string'
-        ? request.input_data
-        : JSON.stringify(request.input_data || ""), // Convert input_data to string
+      input:
+        typeof request.input_data === "string"
+          ? request.input_data
+          : JSON.stringify(request.input_data || ""), // Convert input_data to string
       stream: true,
       conversation: request.conversation_id, // Include conversation if present
     };
 
-    const response = await fetch(`${this.baseUrl}/v1/responses`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-      },
-      body: JSON.stringify(openAIRequest),
-    });
+    const response = await this.authorizedFetch(
+      `${this.baseUrl}/v1/responses`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
+        body: JSON.stringify(openAIRequest),
+      }
+    );
 
     if (!response.ok) {
       // Try to extract detailed error message from response body
@@ -506,8 +546,14 @@ class ApiClient {
   }
 
   // Add entity from URL
-  async addEntity(url: string, metadata?: Record<string, unknown>): Promise<BackendEntityInfo> {
-    const response = await this.request<{ success: boolean; entity: BackendEntityInfo }>("/v1/entities/add", {
+  async addEntity(
+    url: string,
+    metadata?: Record<string, unknown>
+  ): Promise<BackendEntityInfo> {
+    const response = await this.request<{
+      success: boolean;
+      entity: BackendEntityInfo;
+    }>("/v1/entities/add", {
       method: "POST",
       body: JSON.stringify({ url, metadata }),
     });
@@ -521,9 +567,12 @@ class ApiClient {
 
   // Remove entity by ID
   async removeEntity(entityId: string): Promise<void> {
-    const response = await this.request<{ success: boolean }>(`/v1/entities/${entityId}`, {
-      method: "DELETE",
-    });
+    const response = await this.request<{ success: boolean }>(
+      `/v1/entities/${entityId}`,
+      {
+        method: "DELETE",
+      }
+    );
 
     if (!response.success) {
       throw new Error("Failed to remove entity");

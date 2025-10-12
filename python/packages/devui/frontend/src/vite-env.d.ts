@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_AZURE_AD_REDIRECT_URI?: string;
   readonly VITE_AZURE_AD_POST_LOGOUT_REDIRECT_URI?: string;
   readonly VITE_GRAPH_SCOPES?: string;
+  readonly VITE_AZURE_AD_API_SCOPES?: string;
 }
 
 interface ImportMeta {

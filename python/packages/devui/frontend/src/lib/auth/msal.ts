@@ -44,16 +44,13 @@ const resolveUri = (
   );
 };
 
-const parseScopes = (value?: string): string[] => {
-  if (!value) {
-    return ["User.Read"];
-  }
-
-  return value
-    .split(/[ ,]+/)
-    .map((scope) => scope.trim())
-    .filter(Boolean);
-};
+const parseScopes = (value: string | undefined, fallback: string[] = []): string[] =>
+  value
+    ? value
+        .split(/[ ,]+/)
+        .map((scope) => scope.trim())
+        .filter(Boolean)
+    : fallback;
 
 const browserOrigin = isBrowser ? window.location.origin : undefined;
 
@@ -65,7 +62,10 @@ const postLogoutRedirectUri = resolveUri(
   redirectUri
 );
 
-export const graphScopes = parseScopes(import.meta.env.VITE_GRAPH_SCOPES);
+export const graphScopes = parseScopes(import.meta.env.VITE_GRAPH_SCOPES, [
+  "User.Read",
+]);
+export const apiScopes = parseScopes(import.meta.env.VITE_AZURE_AD_API_SCOPES, []);
 
 export const loginRequest = {
   scopes: graphScopes,
