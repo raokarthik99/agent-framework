@@ -9,12 +9,25 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { apiScopes, loginRequest } from "@/lib/auth/msal";
 import { apiClient } from "@/services/api";
 import { SignInView } from "./sign-in-view";
+import { getStoredLoginHint, storeLoginHint } from "@/lib/auth/storage";
 
 export function AuthGate({ children }: PropsWithChildren) {
   const isAuthenticated = useIsAuthenticated();
   const { instance, accounts, inProgress } = useMsal();
   const [apiSessionReady, setApiSessionReady] = useState(
     apiScopes.length === 0
+  );
+  const [storedLoginHint, setStoredLoginHint] = useState<string | null>(() =>
+    getStoredLoginHint()
+  );
+  const [attemptedSso, setAttemptedSso] = useState(false);
+  const [silentLoginLoading, setSilentLoginLoading] = useState(false);
+  const activeAccountId = useMemo(
+    () =>
+      instance.getActiveAccount()?.homeAccountId ??
+      accounts[0]?.homeAccountId ??
+      null,
+    [accounts, instance]
   );
 
   useEffect(() => {
@@ -24,13 +37,14 @@ export function AuthGate({ children }: PropsWithChildren) {
     }
   }, [accounts, instance]);
 
-  const activeAccountId = useMemo(
-    () =>
-      instance.getActiveAccount()?.homeAccountId ??
-      accounts[0]?.homeAccountId ??
-      null,
-    [accounts, instance]
-  );
+  useEffect(() => {
+    const activeAccount = instance.getActiveAccount();
+    if (activeAccount?.username) {
+      storeLoginHint(activeAccount.username);
+      setStoredLoginHint(activeAccount.username);
+    }
+  }, [activeAccountId, instance]);
+
   const apiScopesKey = apiScopes.join("|");
 
   useEffect(() => {
@@ -90,6 +104,74 @@ export function AuthGate({ children }: PropsWithChildren) {
     isAuthenticated,
   ]);
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      setAttemptedSso(true);
+      setSilentLoginLoading(false);
+      return;
+    }
+
+    if (attemptedSso) {
+      return;
+    }
+
+    if (inProgress !== InteractionStatus.None) {
+      return;
+    }
+
+    if (!storedLoginHint) {
+      setAttemptedSso(true);
+      return;
+    }
+
+    let cancelled = false;
+    setSilentLoginLoading(true);
+
+    instance
+      .ssoSilent({
+        ...loginRequest,
+        authority: instance.getConfiguration().auth.authority,
+        redirectUri: instance.getConfiguration().auth.redirectUri,
+        loginHint: storedLoginHint,
+      })
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        if (result.account) {
+          instance.setActiveAccount(result.account);
+        }
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (error instanceof InteractionRequiredAuthError) {
+          // Silent SSO not available; fall back to interactive login.
+        } else {
+          console.warn("Silent SSO failed", error);
+        }
+      })
+      .finally(() => {
+        if (cancelled) {
+          return;
+        }
+        setSilentLoginLoading(false);
+        setAttemptedSso(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    attemptedSso,
+    inProgress,
+    instance,
+    isAuthenticated,
+    storedLoginHint,
+  ]);
+
   if (isAuthenticated && !apiSessionReady) {
     return (
       <LoadingState
@@ -111,6 +193,16 @@ export function AuthGate({ children }: PropsWithChildren) {
   }
 
   if (!isAuthenticated) {
+    if (!attemptedSso || silentLoginLoading) {
+      return (
+        <LoadingState
+          message="Looking for an existing Microsoft session..."
+          description="Checking if you already have an active sign-in."
+          fullPage
+        />
+      );
+    }
+
     const handleSignIn = () => instance.loginRedirect(loginRequest);
     return <SignInView onSignIn={handleSignIn} />;
   }

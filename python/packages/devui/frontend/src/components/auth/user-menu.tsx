@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { LogOut, User as UserIcon } from "lucide-react";
 import { getUserPhoto, getUserProfile } from "@/services/graph";
+import { clearStoredLoginHint } from "@/lib/auth/storage";
 
 interface ProfileState {
   account?: AccountInfo;
@@ -274,6 +275,7 @@ export function UserMenu() {
   const initials = loading ? null : getInitials(displayName);
 
   const handleSignOut = () => {
+    clearStoredLoginHint();
     instance.logoutRedirect({ account: activeAccount });
   };
 
