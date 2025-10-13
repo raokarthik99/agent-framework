@@ -26,17 +26,36 @@ const resolveAuthority = (): string => {
   return `https://login.microsoftonline.com/${tenantId}`;
 };
 
+type ResolveUriOptions = {
+  fallback?: string;
+  relativeTo?: string;
+};
+
 const resolveUri = (
   key: keyof ImportMetaEnv & string,
-  fallback?: string
+  { fallback, relativeTo }: ResolveUriOptions = {}
 ): string => {
   const configured = import.meta.env[key];
+
+  const toAbsolute = (value: string): string => {
+    try {
+      return new URL(value).toString();
+    } catch {
+      if (!relativeTo) {
+        throw new Error(
+          `Unable to resolve relative URI "${value}" for ${key}. Provide an absolute URL or ensure a browser origin is available.`
+        );
+      }
+      return new URL(value, relativeTo).toString();
+    }
+  };
+
   if (configured) {
-    return configured;
+    return toAbsolute(configured);
   }
 
   if (fallback) {
-    return fallback;
+    return toAbsolute(fallback);
   }
 
   throw new Error(
@@ -56,10 +75,16 @@ const browserOrigin = isBrowser ? window.location.origin : undefined;
 
 const clientId = requireEnv("VITE_AZURE_AD_CLIENT_ID");
 const authority = resolveAuthority();
-const redirectUri = resolveUri("VITE_AZURE_AD_REDIRECT_URI", browserOrigin);
+const redirectUri = resolveUri("VITE_AZURE_AD_REDIRECT_URI", {
+  fallback: "/auth/callback",
+  relativeTo: browserOrigin,
+});
 const postLogoutRedirectUri = resolveUri(
   "VITE_AZURE_AD_POST_LOGOUT_REDIRECT_URI",
-  redirectUri
+  {
+    fallback: redirectUri,
+    relativeTo: browserOrigin,
+  }
 );
 
 export const graphScopes = parseScopes(import.meta.env.VITE_GRAPH_SCOPES, [

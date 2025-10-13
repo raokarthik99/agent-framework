@@ -49,6 +49,26 @@ devui ./agents --port 8080
 
 When DevUI starts with no discovered entities, it displays a **sample entity gallery** with curated examples from the Agent Framework repository to help you get started quickly.
 
+## Authentication Requirements
+
+The DevUI backend requires Microsoft Entra access tokens on every API request. Configure the server with your tenant and accepted audiences before starting it:
+
+```bash
+cp agent_framework_devui/.env.example agent_framework_devui/.env
+```
+
+Edit `.env` with your tenant values (`DEVUI_AZURE_AD_TENANT_ID`, `DEVUI_AZURE_AD_ALLOWED_AUDIENCES`). The server automatically loads `.env` and `.env.local` from either the repository root or the `agent_framework_devui` folder. Optional overrides include:
+
+```dotenv
+DEVUI_AZURE_AD_AUTHORITY_HOST=https://login.microsoftonline.com
+DEVUI_AZURE_AD_CLOCK_SKEW=120          # seconds
+DEVUI_AZURE_AD_JWKS_CACHE_TTL=3600     # seconds
+```
+
+Each API call must include a `Bearer` token in the `Authorization` header. The bundled frontend handles this automatically once the user signs in with Microsoft Entra ID.
+
+See `agent_framework_devui/README.md` for backend-specific setup details.
+
 ## Directory Structure
 
 For your agents to be discovered by the DevUI, they must be organized in a directory structure like below. Each agent/workflow must have an `__init__.py` that exports the required variable (`agent` or `workflow`).
@@ -84,6 +104,7 @@ For convenience, DevUI provides an OpenAI Responses backend API. This means you 
 # Simple - use your entity name as the model
 curl -X POST http://localhost:8080/v1/responses \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${DEVUI_ACCESS_TOKEN}" \
   -d @- << 'EOF'
 {
   "model": "weather_agent",
@@ -98,7 +119,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://localhost:8080/v1",
-    api_key="not-needed"  # API key not required for local DevUI
+    api_key="<entra-access-token>"
 )
 
 response = client.responses.create(

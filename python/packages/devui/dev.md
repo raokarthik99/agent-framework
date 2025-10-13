@@ -25,7 +25,7 @@ Create a `.env` file in the `python/` directory with your API credentials:
 
 ```bash
 # Copy the example file
-cp .env.example .env
+cp agent_framework_devui/.env.example agent_framework_devui/.env
 ```
 
 Then edit `.env` and add your API keys:
@@ -39,6 +39,15 @@ OPENAI_CHAT_MODEL_ID="gpt-4o-mini"
 AZURE_OPENAI_ENDPOINT="your-endpoint"
 AZURE_OPENAI_CHAT_DEPLOYMENT_NAME="your-deployment-name"
 ```
+
+Add the DevUI backend section to the same `.env` file:
+
+```dotenv
+DEVUI_AZURE_AD_TENANT_ID=<your-tenant-guid>
+DEVUI_AZURE_AD_ALLOWED_AUDIENCES=api://<backend-app-id>/.default
+```
+
+These values are loaded automatically when the server starts, whether the `.env` lives at the repository root or inside `agent_framework_devui`, so manual `export` commands are unnecessary.
 
 ## 4. Test DevUI
 
@@ -75,6 +84,7 @@ You can also test via API calls:
 ```bash
 curl -X POST http://localhost:8080/v1/responses \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${DEVUI_ACCESS_TOKEN}" \
   -d '{
     "model": "weather_agent",
     "input": "What is the weather in Seattle?"
@@ -87,6 +97,7 @@ curl -X POST http://localhost:8080/v1/responses \
 # Create a conversation
 curl -X POST http://localhost:8080/v1/conversations \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${DEVUI_ACCESS_TOKEN}" \
   -d '{"metadata": {"agent_id": "weather_agent"}}'
 
 # Returns: {"id": "conv_abc123", ...}
@@ -94,6 +105,7 @@ curl -X POST http://localhost:8080/v1/conversations \
 # Use conversation ID in requests
 curl -X POST http://localhost:8080/v1/responses \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${DEVUI_ACCESS_TOKEN}" \
   -d '{
     "model": "weather_agent",
     "input": "What is the weather in Seattle?",
@@ -103,6 +115,7 @@ curl -X POST http://localhost:8080/v1/responses \
 # Continue the conversation
 curl -X POST http://localhost:8080/v1/responses \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${DEVUI_ACCESS_TOKEN}" \
   -d '{
     "model": "weather_agent",
     "input": "How about tomorrow?",

@@ -7,13 +7,16 @@ import json
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from ._auth import AuthenticatedUser, AuthenticationError, EntraAuthSettings, EntraTokenValidator
 from ._discovery import EntityDiscovery
 from ._executor import AgentFrameworkExecutor
 from ._mapper import MessageMapper
@@ -21,6 +24,31 @@ from .models import AgentFrameworkRequest, OpenAIError
 from .models._discovery_models import DiscoveryResponse, EntityInfo
 
 logger = logging.getLogger(__name__)
+
+_env_candidates = [
+    Path(".env"),
+    Path(".env.local"),
+]
+
+_package_dir = Path(__file__).resolve().parent
+_env_candidates.extend(
+    [
+        _package_dir / ".env",
+        _package_dir / ".env.local",
+    ]
+)
+
+_loaded_env_files: list[str] = []
+for candidate in _env_candidates:
+    try:
+        loaded = load_dotenv(dotenv_path=str(candidate), override=False)
+    except OSError:
+        loaded = False
+    if loaded:
+        _loaded_env_files.append(str(candidate))
+
+if _loaded_env_files:
+    logger.debug("Loaded environment variables from %s", ", ".join(_loaded_env_files))
 
 
 class DevServer:
@@ -114,11 +142,28 @@ class DevServer:
     def create_app(self) -> FastAPI:
         """Create the FastAPI application."""
 
+        try:
+            auth_settings = EntraAuthSettings.from_env()
+        except AuthenticationError as exc:
+            logger.error("Authentication configuration error: %s", exc.message)
+            raise RuntimeError(exc.message) from exc
+
+        token_validator = EntraTokenValidator(auth_settings)
+        protected_prefixes = ("/v1",)
+
         @asynccontextmanager
         async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             # Startup
             logger.info("Starting Agent Framework Server")
             await self._ensure_executor()
+            try:
+                await token_validator.initialize()
+            except AuthenticationError as exc:
+                logger.error("Failed to initialize authentication: %s", exc.message)
+                raise RuntimeError(exc.message) from exc
+
+            app.state.token_validator = token_validator
+            app.state.auth_settings = auth_settings
             yield
             # Shutdown
             logger.info("Shutting down Agent Framework Server")
@@ -143,6 +188,44 @@ class DevServer:
             allow_headers=["*"],
         )
 
+        @app.middleware("http")
+        async def enforce_authentication(request: Request, call_next):
+            if request.method == "OPTIONS":
+                return await call_next(request)
+
+            endpoint = request.scope.get("endpoint")
+            if endpoint is None:
+                route = request.scope.get("route")
+                endpoint = getattr(route, "endpoint", None) if route else None
+
+            if endpoint and getattr(endpoint, "_allow_anonymous", False):
+                return await call_next(request)
+
+            path = request.url.path
+            is_protected = any(
+                path == prefix or path.startswith(f"{prefix}/") for prefix in protected_prefixes
+            )
+            if not is_protected:
+                return await call_next(request)
+
+            authorization = request.headers.get("Authorization")
+            if not authorization:
+                return JSONResponse(status_code=401, content={"detail": "Authorization header missing."})
+
+            scheme, _, credentials = authorization.partition(" ")
+            if scheme.lower() != "bearer" or not credentials.strip():
+                return JSONResponse(status_code=401, content={"detail": "Bearer token required."})
+
+            token = credentials.strip()
+            try:
+                user: AuthenticatedUser = await token_validator.validate_token(token)
+            except AuthenticationError as exc:
+                logger.warning("Authentication failed for %s: %s", path, exc.message)
+                return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+
+            request.state.user = user
+            return await call_next(request)
+
         self._register_routes(app)
         self._mount_ui(app)
 
@@ -151,7 +234,13 @@ class DevServer:
     def _register_routes(self, app: FastAPI) -> None:
         """Register API routes."""
 
+        def allow_anonymous(handler):
+            """Mark an endpoint as not requiring authentication."""
+            setattr(handler, "_allow_anonymous", True)
+            return handler
+
         @app.get("/health")
+        @allow_anonymous
         async def health_check() -> dict[str, Any]:
             """Health check endpoint."""
             executor = await self._ensure_executor()
