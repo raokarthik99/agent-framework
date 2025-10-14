@@ -63,7 +63,7 @@ type AuthTokenProvider = () => Promise<AuthToken | null | undefined>;
 const DEFAULT_API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL !== undefined
     ? import.meta.env.VITE_API_BASE_URL
-    : "http://127.0.0.1:8080";
+    : "http://localhost:8080";
 
 // Get backend URL from localStorage or default
 function getBackendUrl(): string {

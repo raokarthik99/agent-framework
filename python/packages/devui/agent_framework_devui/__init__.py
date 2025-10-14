@@ -23,7 +23,7 @@ def serve(
     entities: list[Any] | None = None,
     entities_dir: str | None = None,
     port: int = 8080,
-    host: str = "127.0.0.1",
+    host: str = "localhost",
     auto_open: bool = False,
     cors_origins: list[str] | None = None,
     ui_enabled: bool = True,

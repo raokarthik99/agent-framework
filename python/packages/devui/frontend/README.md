@@ -8,7 +8,7 @@ yarn install
 
 # Create .env.local with backend URL and Microsoft Entra settings
 cat <<'EOF' > .env.local
-VITE_API_BASE_URL=http://127.0.0.1:8080
+VITE_API_BASE_URL=http://localhost:8080
 VITE_AZURE_AD_CLIENT_ID=<your-app-client-id>
 VITE_AZURE_AD_TENANT_ID=<your-tenant-id>
 VITE_AZURE_AD_REDIRECT_URI=/auth/callback

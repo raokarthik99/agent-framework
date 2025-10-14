@@ -383,7 +383,7 @@ export default function App() {
 
               <p className="text-xs text-muted-foreground">
                 Default:{" "}
-                <span className="font-mono">http://127.0.0.1:8080</span>
+                <span className="font-mono">http://localhost:8080</span>
               </p>
             </div>
 

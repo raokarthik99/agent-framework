@@ -32,7 +32,7 @@ export function SettingsModal({
 
   // Get current backend URL from localStorage or default
   const defaultUrl =
-    import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8080";
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
   const [backendUrl, setBackendUrl] = useState(() => {
     return localStorage.getItem("devui_backend_url") || defaultUrl;
   });
@@ -50,7 +50,7 @@ export function SettingsModal({
       // Reload to apply new backend URL
       window.location.reload();
     } catch {
-      alert("Please enter a valid URL (e.g., http://127.0.0.1:8080)");
+      alert("Please enter a valid URL (e.g., http://localhost:8080)");
     }
   };
 
@@ -160,7 +160,7 @@ export function SettingsModal({
                   type="url"
                   value={tempUrl}
                   onChange={(e) => setTempUrl(e.target.value)}
-                  placeholder="http://127.0.0.1:8080"
+                  placeholder="http://localhost:8080"
                   className="font-mono text-sm"
                 />
 

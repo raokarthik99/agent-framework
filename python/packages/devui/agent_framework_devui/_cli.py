@@ -38,7 +38,7 @@ Examples:
 
     parser.add_argument("--port", "-p", type=int, default=8080, help="Port to run server on (default: 8080)")
 
-    parser.add_argument("--host", default="127.0.0.1", help="Host to bind server to (default: 127.0.0.1)")
+    parser.add_argument("--host", default="localhost", help="Host to bind server to (default: localhost)")
 
     parser.add_argument("--no-open", action="store_true", help="Don't automatically open browser")
 
