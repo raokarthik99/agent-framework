@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useIsAuthenticated, useMsal } from "@azure/msal-react";
 import {
   InteractionRequiredAuthError,
@@ -22,6 +22,7 @@ export function AuthGate({ children }: PropsWithChildren) {
   );
   const [attemptedSso, setAttemptedSso] = useState(false);
   const [silentLoginLoading, setSilentLoginLoading] = useState(false);
+  const apiRefreshTimeoutRef = useRef<number | undefined>(undefined);
   const activeAccountId = useMemo(
     () =>
       instance.getActiveAccount()?.homeAccountId ??
@@ -50,20 +51,39 @@ export function AuthGate({ children }: PropsWithChildren) {
   useEffect(() => {
     if (!isAuthenticated || apiScopes.length === 0) {
       apiClient.clearAuthProvider();
+      apiClient.clearAccessToken();
       setApiSessionReady(true);
       return;
     }
 
     if (inProgress !== InteractionStatus.None) {
       setApiSessionReady(false);
+      apiClient.clearAccessToken();
       return;
     }
 
-    const authProvider = async () => {
-      if (apiScopes.length === 0) {
-        return null;
+    let cancelled = false;
+    const clearScheduledRefresh = () => {
+      if (apiRefreshTimeoutRef.current !== undefined) {
+        window.clearTimeout(apiRefreshTimeoutRef.current);
+        apiRefreshTimeoutRef.current = undefined;
       }
-
+    };
+    const scheduleRefresh = (expiresAt?: number) => {
+      clearScheduledRefresh();
+      if (!expiresAt) {
+        return;
+      }
+      const leadTimeMs = 2 * 60 * 1000;
+      const now = Date.now();
+      const refreshInMs = Math.max(expiresAt - now - leadTimeMs, 30_000);
+      apiRefreshTimeoutRef.current = window.setTimeout(() => {
+        void fetchToken(true);
+      }, refreshInMs);
+    };
+    const fetchToken = async (
+      forceRefresh = false
+    ): Promise<{ token: string; expiresAt?: number }> => {
       const account = instance.getActiveAccount();
       if (!account) {
         throw new Error(
@@ -75,25 +95,58 @@ export function AuthGate({ children }: PropsWithChildren) {
         const result = await instance.acquireTokenSilent({
           account,
           scopes: apiScopes,
+          forceRefresh,
         });
-        return result.accessToken;
+        const expiresAt = result.expiresOn?.getTime();
+        apiClient.setAccessToken(result.accessToken, expiresAt);
+        scheduleRefresh(expiresAt);
+        return {
+          token: result.accessToken,
+          expiresAt,
+        };
       } catch (error) {
         if (error instanceof InteractionRequiredAuthError) {
+          setApiSessionReady(false);
           await instance.acquireTokenRedirect({
             account,
             scopes: apiScopes,
           });
-          return null;
         }
         throw error;
       }
     };
+    const authProvider = async () => {
+      return fetchToken();
+    };
 
     apiClient.setAuthProvider(authProvider);
-    setApiSessionReady(true);
+    apiClient.clearAccessToken();
+    setApiSessionReady(false);
+    const ensureToken = async () => {
+      try {
+        const token = await fetchToken();
+        if (!cancelled && token?.token) {
+          setApiSessionReady(true);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setApiSessionReady(false);
+        }
+        if (
+          !(error instanceof InteractionRequiredAuthError) &&
+          !cancelled
+        ) {
+          console.error("Failed to acquire API access token", error);
+        }
+      }
+    };
+    void ensureToken();
     return () => {
+      cancelled = true;
+      clearScheduledRefresh();
       setApiSessionReady(apiScopes.length === 0);
       apiClient.clearAuthProvider(authProvider);
+      apiClient.clearAccessToken();
     };
   }, [
     accounts.length,

@@ -53,7 +53,12 @@ interface ConversationApiResponse {
   metadata?: Record<string, string>;
 }
 
-type AuthTokenProvider = () => Promise<string | null | undefined>;
+interface AuthToken {
+  token: string;
+  expiresAt?: number;
+}
+
+type AuthTokenProvider = () => Promise<AuthToken | null | undefined>;
 
 const DEFAULT_API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL !== undefined
@@ -68,6 +73,8 @@ function getBackendUrl(): string {
 class ApiClient {
   private baseUrl: string;
   private authProvider?: AuthTokenProvider;
+  private accessToken?: string;
+  private accessTokenExpiry?: number;
 
   constructor(baseUrl?: string) {
     this.baseUrl = baseUrl || getBackendUrl();
@@ -92,6 +99,27 @@ class ApiClient {
     }
   }
 
+  setAccessToken(token: string, expiresAt?: number) {
+    this.accessToken = token;
+    this.accessTokenExpiry = expiresAt;
+  }
+
+  clearAccessToken() {
+    this.accessToken = undefined;
+    this.accessTokenExpiry = undefined;
+  }
+
+  private hasValidAccessToken(): boolean {
+    if (!this.accessToken) {
+      return false;
+    }
+    if (typeof this.accessTokenExpiry !== "number") {
+      return true;
+    }
+    const safetyWindowMs = 30_000; // refresh 30s before expiry
+    return Date.now() + safetyWindowMs < this.accessTokenExpiry;
+  }
+
   private async authorizedFetch(
     input: string,
     init: RequestInit = {}
@@ -107,12 +135,31 @@ class ApiClient {
       headers.set("Content-Type", "application/json");
     }
 
-    if (this.authProvider) {
-      const token = await this.authProvider();
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
+    let tokenToUse: AuthToken | undefined;
+
+    if (this.hasValidAccessToken()) {
+      tokenToUse = {
+        token: this.accessToken as string,
+        expiresAt: this.accessTokenExpiry,
+      };
+    } else if (this.authProvider) {
+      const providedToken = await this.authProvider();
+      if (!providedToken?.token) {
+        throw new Error(
+          "API authentication is still in progress. Retry once the session is ready."
+        );
       }
+      tokenToUse = providedToken;
+      this.setAccessToken(providedToken.token, providedToken.expiresAt);
     }
+
+    if (!tokenToUse) {
+      throw new Error(
+        "API authentication is not available. Sign in again to continue."
+      );
+    }
+
+    headers.set("Authorization", `Bearer ${tokenToUse.token}`);
 
     return fetch(input, {
       ...init,
