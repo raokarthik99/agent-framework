@@ -15,6 +15,29 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+
+class SPAStaticFiles(StaticFiles):
+    """Static file handler that falls back to index.html for client-side routes."""
+
+    def __init__(self, *args: Any, index_file: str = "index.html", **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.index_file = index_file
+
+    async def get_response(self, path: str, scope) -> Any:  # type: ignore[override]
+        try:
+            return await super().get_response(path, scope)
+        except (HTTPException, StarletteHTTPException) as exc:
+            if exc.status_code != 404:
+                raise
+
+            method = scope.get("method")
+            if method not in {"GET", "HEAD"}:
+                raise
+
+            logger.info("SPA fallback serving %s for unmatched path %s", self.index_file, path)
+            return await super().get_response(self.index_file, scope)
 
 from ._auth import AuthenticatedUser, AuthenticationError, EntraAuthSettings, EntraTokenValidator
 from ._discovery import EntityDiscovery
@@ -670,7 +693,14 @@ class DevServer:
 
         ui_dir = Path(__file__).parent / "ui"
         if ui_dir.exists() and ui_dir.is_dir() and self.ui_enabled:
-            app.mount("/", StaticFiles(directory=str(ui_dir), html=True), name="ui")
+            index_path = ui_dir / "index.html"
+            if not index_path.exists():
+                logger.warning("UI directory %s missing index.html; skipping SPA fallback.", ui_dir)
+            app.mount(
+                "/",
+                SPAStaticFiles(directory=str(ui_dir), html=True, index_file="index.html"),
+                name="ui",
+            )
 
     def register_entities(self, entities: list[Any]) -> None:
         """Register entities to be discovered when server starts.
