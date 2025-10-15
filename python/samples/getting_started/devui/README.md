@@ -16,6 +16,27 @@ DevUI is a sample application that provides:
 
 ## Quick Start
 
+### Set Up a Virtual Environment (required once)
+
+Run all setup commands from this folder (`python/samples/getting_started/devui`). Create and activate a virtual environment locally so dependencies stay isolated:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
+pip install --upgrade pip
+```
+
+### Install the Local DevUI Package (required once)
+
+When customizing DevUI (for example to add authentication or new components), use the editable package that lives in this repo instead of the published PyPI build:
+
+```bash
+pip uninstall -y agent-framework-devui
+pip install -e ../../../packages/devui
+```
+
+These commands assume you're still in `python/samples/getting_started/devui` with the virtual environment activated.
+
 ### Option 1: In-Memory Mode (Simplest)
 
 Run a single sample directly. This demonstrates how to wrap agents and workflows programmatically without needing a directory structure:
@@ -146,10 +167,10 @@ curl http://localhost:8080/v1/entities
 
 **Missing API keys**: Check your `.env` files or environment variables.
 
-**Import errors**: Make sure you've installed the devui package:
+**Import errors**: Confirm that the editable DevUI package is installed:
 
 ```bash
-pip install agent-framework-devui --pre
+pip install -e ../../../packages/devui
 ```
 
 **Port conflicts**: DevUI uses ports 8080 (directory mode) and 8090 (in-memory mode) by default. Close other services or specify a different port:
