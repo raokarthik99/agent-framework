@@ -26,7 +26,6 @@ interface BackendEntityInfo {
   tools?: (string | Record<string, unknown>)[];
   metadata: Record<string, unknown>;
   source?: string;
-  original_url?: string;
   // Agent-specific fields (present when type === "agent")
   instructions?: string;
   model?: string;
@@ -224,6 +223,7 @@ class ApiClient {
             typeof entity.metadata?.module_path === "string"
               ? entity.metadata.module_path
               : undefined,
+          metadata: entity.metadata, // Preserve metadata including lazy_loaded flag
           // Agent-specific fields
           instructions: entity.instructions,
           model: entity.model,
@@ -249,6 +249,7 @@ class ApiClient {
             typeof entity.metadata?.module_path === "string"
               ? entity.metadata.module_path
               : undefined,
+          metadata: entity.metadata, // Preserve metadata including lazy_loaded flag
           input_schema:
             (entity.input_schema as unknown as import("@/types").JSONSchema) || {
               type: "string",
