@@ -64,6 +64,8 @@ export default function App() {
   // Initialize app - load agents and workflows
   useEffect(() => {
     const loadData = async () => {
+      setIsLoadingEntities(true);
+      setEntityError(null);
       try {
         // Single API call instead of two parallel calls to same endpoint
         const { agents: agentList, workflows: workflowList } = await apiClient.getEntities();
