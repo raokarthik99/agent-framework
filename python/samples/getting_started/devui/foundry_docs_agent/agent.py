@@ -40,8 +40,6 @@ def get_user_info() -> dict[str, str | bool | None]:
 agent = ChatAgent(
     name="FoundryDocsAgent",
     chat_client=AzureAIAgentClient(
-        project_endpoint=os.environ.get("AZURE_AI_PROJECT_ENDPOINT"),
-        model_deployment_name=os.environ.get("FOUNDRY_MODEL_DEPLOYMENT_NAME"),
         async_credential=AzureCliCredential(),
     ),
     instructions=(
