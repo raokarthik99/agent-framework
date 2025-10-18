@@ -251,19 +251,17 @@ class AgentFrameworkExecutor:
                     logger.debug(f"Executing agent with text input: {user_message[:100]}...")
                 else:
                     logger.debug(f"Executing agent with multimodal ChatMessage: {type(user_message)}")
-                agent_kwargs = self._prepare_agent_call_kwargs(request, context)
-
                 # Check if agent supports streaming
                 if hasattr(agent, "run_stream") and callable(agent.run_stream):
                     # Use Agent Framework's native streaming with optional thread
                     if thread:
-                        async for update in agent.run_stream(user_message, thread=thread, **agent_kwargs):
+                        async for update in agent.run_stream(user_message, thread=thread):
                             for trace_event in trace_collector.get_pending_events():
                                 yield trace_event
 
                             yield update
                     else:
-                        async for update in agent.run_stream(user_message, **agent_kwargs):
+                        async for update in agent.run_stream(user_message):
                             for trace_event in trace_collector.get_pending_events():
                                 yield trace_event
 
@@ -272,9 +270,9 @@ class AgentFrameworkExecutor:
                     # Non-streaming agent - use run() and yield complete response
                     logger.info("Agent lacks run_stream(), using run() method (non-streaming)")
                     if thread:
-                        response = await agent.run(user_message, thread=thread, **agent_kwargs)
+                        response = await agent.run(user_message, thread=thread)
                     else:
-                        response = await agent.run(user_message, **agent_kwargs)
+                        response = await agent.run(user_message)
 
                     # Yield trace events before response
                     for trace_event in trace_collector.get_pending_events():
@@ -382,33 +380,6 @@ class AgentFrameworkExecutor:
         finally:
             if token is not None:
                 reset_current_execution_context(token)
-
-    def _prepare_agent_call_kwargs(
-        self, request: AgentFrameworkRequest, context: ExecutionContext | None
-    ) -> dict[str, Any]:
-        """Create kwargs for agent.run / agent.run_stream including metadata + tool context."""
-        agent_kwargs: dict[str, Any] = {}
-
-        metadata = dict(request.metadata or {})
-
-        if context:
-            context_metadata = context.to_metadata()
-            if context_metadata:
-                existing = metadata.get("authenticated_user")
-                if isinstance(existing, dict):
-                    existing.update(context_metadata)
-                else:
-                    metadata["authenticated_user"] = context_metadata
-
-        if metadata:
-            agent_kwargs["metadata"] = metadata
-
-        if context:
-            user_identifier = context.user_identifier()
-            if user_identifier:
-                agent_kwargs.setdefault("user", user_identifier)
-
-        return agent_kwargs
 
     def _convert_input_to_chat_message(self, input_data: Any) -> Any:
         """Convert OpenAI Responses API input to Agent Framework ChatMessage or string.
