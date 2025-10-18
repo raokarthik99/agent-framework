@@ -7,6 +7,11 @@ import logging
 import webbrowser
 from typing import Any
 
+from ._context import (
+    get_current_execution_context,
+    get_current_user_access_token,
+    get_current_user_context,
+)
 from ._server import DevServer
 from .models import AgentFrameworkRequest, OpenAIError, OpenAIResponse, ResponseStreamEvent
 from .models._discovery_models import DiscoveryResponse, EntityInfo, EnvVarRequirement
@@ -148,4 +153,7 @@ __all__ = [
     "ResponseStreamEvent",
     "main",
     "serve",
+    "get_current_execution_context",
+    "get_current_user_context",
+    "get_current_user_access_token",
 ]

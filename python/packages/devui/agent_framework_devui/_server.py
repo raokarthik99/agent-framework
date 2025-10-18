@@ -40,6 +40,7 @@ class SPAStaticFiles(StaticFiles):
             return await super().get_response(self.index_file, scope)
 
 from ._auth import AuthenticatedUser, AuthenticationError, EntraAuthSettings, EntraTokenValidator
+from ._context import ExecutionContext
 from ._discovery import EntityDiscovery
 from ._executor import AgentFrameworkExecutor
 from ._mapper import MessageMapper
@@ -247,6 +248,7 @@ class DevServer:
                 return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
 
             request.state.user = user
+            request.state.access_token = token
             return await call_next(request)
 
         self._register_routes(app)
@@ -448,10 +450,15 @@ class DevServer:
                     error = OpenAIError.create(f"Entity not found: {entity_id}")
                     return JSONResponse(status_code=404, content=error.to_dict())
 
+                execution_context = ExecutionContext(
+                    user=getattr(raw_request.state, "user", None),
+                    access_token=getattr(raw_request.state, "access_token", None),
+                )
+
                 # Execute request
                 if request.stream:
                     return StreamingResponse(
-                        self._stream_execution(executor, request),
+                        self._stream_execution(executor, request, execution_context),
                         media_type="text/event-stream",
                         headers={
                             "Cache-Control": "no-cache",
@@ -459,7 +466,7 @@ class DevServer:
                             "Access-Control-Allow-Origin": "*",
                         },
                     )
-                return await executor.execute_sync(request)
+                return await executor.execute_sync(request, execution_context)
 
             except Exception as e:
                 logger.error(f"Error executing request: {e}")
@@ -610,7 +617,10 @@ class DevServer:
                 raise HTTPException(status_code=500, detail=f"Failed to get item: {e!s}") from e
 
     async def _stream_execution(
-        self, executor: AgentFrameworkExecutor, request: AgentFrameworkRequest
+        self,
+        executor: AgentFrameworkExecutor,
+        request: AgentFrameworkRequest,
+        context: ExecutionContext | None = None,
     ) -> AsyncGenerator[str, None]:
         """Stream execution directly through executor."""
         try:
@@ -618,7 +628,7 @@ class DevServer:
             events = []
 
             # Stream all events
-            async for event in executor.execute_streaming(request):
+            async for event in executor.execute_streaming(request, context):
                 events.append(event)
 
                 # IMPORTANT: Check model_dump_json FIRST because to_json() can have newlines (pretty-printing)

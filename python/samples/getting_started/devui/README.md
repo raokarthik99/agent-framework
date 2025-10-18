@@ -26,16 +26,23 @@ source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
 pip install --upgrade pip
 ```
 
-### Install the Local DevUI Package (required once)
+### Install Agent Framework + Local DevUI (required once)
 
-When customizing DevUI (for example to add authentication or new components), use the editable package that lives in this repo instead of the published PyPI build:
+This setup keeps the published dependency graph while swapping in your customized DevUI and the dynamic shim that exposes its exports.
 
 ```bash
-pip uninstall -y agent-framework-devui
+pip install agent-framework
+pip install -e ../../../packages/core --no-deps
 pip install -e ../../../packages/devui
 ```
 
-These commands assume you're still in `python/samples/getting_started/devui` with the virtual environment activated.
+Run these commands from `python/samples/getting_started/devui` with the virtual environment activated. The `--no-deps` flag tells pip to keep the dependencies that came from the PyPI wheel.
+
+Verify the shim picks up your local exports:
+
+```bash
+python -c "from agent_framework.devui import serve, get_current_execution_context"
+```
 
 ### Option 1: In-Memory Mode (Simplest)
 
@@ -77,7 +84,7 @@ agent_name/
 | Sample                                           | Description                                                                                       | Features                                                                 | Required Environment Variables                                                       |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
 | [**weather_agent_azure/**](weather_agent_azure/) | Weather agent using Azure OpenAI with API key authentication                                      | Azure OpenAI integration, function calling, mock weather tools           | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME`, `AZURE_OPENAI_ENDPOINT` |
-| [**foundry_agent/**](foundry_agent/)             | Weather agent using Azure AI Agent (Foundry) with Azure CLI authentication (run `az login` first) | Azure AI Agent integration, Azure CLI authentication, mock weather tools | `AZURE_AI_PROJECT_ENDPOINT`, `FOUNDRY_MODEL_DEPLOYMENT_NAME`                         |
+| [**foundry_agent/**](foundry_agent/)             | Weather agent using Azure AI Agent (Foundry) with Azure CLI authentication (run `az login` first) | Azure AI Agent integration, Azure CLI authentication, mock weather tools, signed-in user personalization | `AZURE_AI_PROJECT_ENDPOINT`, `FOUNDRY_MODEL_DEPLOYMENT_NAME`                         |
 
 ### Workflows
 
@@ -137,6 +144,19 @@ Then run:
 devui /path/to/my/agents/folder
 ```
 
+## Forwarding Signed-In User Context to Tools
+
+When DevUI runs behind authentication, each agent invocation receives the signed-in user's details and bearer token:
+
+- `agent_framework.devui.get_current_execution_context()` returns the active `ExecutionContext`
+  for the running request.
+- `context.user` exposes identifiers, roles, and claims; `context.access_token` holds the raw
+  bearer token so tools can call downstream APIs on behalf of that user.
+
+The `foundry_agent` sample demonstrates how to import this helper and personalize responses while
+detecting when delegated tokens are available. You can adopt the same pattern by querying the
+execution context inside your tool functions or workflows.
+
 ## API Usage
 
 DevUI exposes OpenAI-compatible endpoints:
@@ -167,9 +187,10 @@ curl http://localhost:8080/v1/entities
 
 **Missing API keys**: Check your `.env` files or environment variables.
 
-**Import errors**: Confirm that the editable DevUI package is installed:
+**Import errors**: Reinstall the editable packages so the shim and DevUI code come from your workspace:
 
 ```bash
+pip install -e ../../../packages/core --no-deps
 pip install -e ../../../packages/devui
 ```
 

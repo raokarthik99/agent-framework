@@ -11,6 +11,13 @@ from typing import Any
 from agent_framework import AgentProtocol
 
 from ._conversations import ConversationStore, InMemoryConversationStore
+from ._context import (
+    EXECUTION_CONTEXT_ATTR,
+    EXECUTION_CONTEXT_SHARED_STATE_KEY,
+    ExecutionContext,
+    reset_current_execution_context,
+    set_current_execution_context,
+)
 from ._discovery import EntityDiscovery
 from ._mapper import MessageMapper
 from ._tracing import capture_traces
@@ -113,7 +120,9 @@ class AgentFrameworkExecutor:
             raise EntityNotFoundError(f"Entity '{entity_id}' not found")
         return entity_info
 
-    async def execute_streaming(self, request: AgentFrameworkRequest) -> AsyncGenerator[Any, None]:
+    async def execute_streaming(
+        self, request: AgentFrameworkRequest, context: ExecutionContext | None = None
+    ) -> AsyncGenerator[Any, None]:
         """Execute request and stream results in OpenAI format.
 
         Args:
@@ -134,7 +143,7 @@ class AgentFrameworkExecutor:
                 return
 
             # Execute entity and convert events
-            async for raw_event in self.execute_entity(entity_id, request):
+            async for raw_event in self.execute_entity(entity_id, request, context=context):
                 openai_events = await self.message_mapper.convert_event(raw_event, request)
                 for event in openai_events:
                     yield event
@@ -143,7 +152,7 @@ class AgentFrameworkExecutor:
             logger.exception(f"Error in streaming execution: {e}")
             # Could yield error event here
 
-    async def execute_sync(self, request: AgentFrameworkRequest) -> OpenAIResponse:
+    async def execute_sync(self, request: AgentFrameworkRequest, context: ExecutionContext | None = None) -> OpenAIResponse:
         """Execute request synchronously and return complete response.
 
         Args:
@@ -153,12 +162,14 @@ class AgentFrameworkExecutor:
             Final aggregated OpenAI response
         """
         # Collect all streaming events
-        events = [event async for event in self.execute_streaming(request)]
+        events = [event async for event in self.execute_streaming(request, context=context)]
 
         # Aggregate into final response
         return await self.message_mapper.aggregate_to_response(events, request)
 
-    async def execute_entity(self, entity_id: str, request: AgentFrameworkRequest) -> AsyncGenerator[Any, None]:
+    async def execute_entity(
+        self, entity_id: str, request: AgentFrameworkRequest, context: ExecutionContext | None = None
+    ) -> AsyncGenerator[Any, None]:
         """Execute the entity and yield raw Agent Framework events plus trace events.
 
         Args:
@@ -186,10 +197,10 @@ class AgentFrameworkExecutor:
             # Use simplified trace capture
             with capture_traces(session_id=session_id, entity_id=entity_id) as trace_collector:
                 if entity_info.type == "agent":
-                    async for event in self._execute_agent(entity_obj, request, trace_collector):
+                    async for event in self._execute_agent(entity_obj, request, trace_collector, context=context):
                         yield event
                 elif entity_info.type == "workflow":
-                    async for event in self._execute_workflow(entity_obj, request, trace_collector):
+                    async for event in self._execute_workflow(entity_obj, request, trace_collector, context=context):
                         yield event
                 else:
                     raise ValueError(f"Unsupported entity type: {entity_info.type}")
@@ -204,7 +215,11 @@ class AgentFrameworkExecutor:
             yield {"type": "error", "message": str(e), "entity_id": entity_id}
 
     async def _execute_agent(
-        self, agent: AgentProtocol, request: AgentFrameworkRequest, trace_collector: Any
+        self,
+        agent: AgentProtocol,
+        request: AgentFrameworkRequest,
+        trace_collector: Any,
+        context: ExecutionContext | None = None,
     ) -> AsyncGenerator[Any, None]:
         """Execute Agent Framework agent with trace collection and optional thread support.
 
@@ -216,62 +231,73 @@ class AgentFrameworkExecutor:
         Yields:
             Agent update events and trace events
         """
+        token = set_current_execution_context(context) if context else None
         try:
-            # Convert input to proper ChatMessage or string
-            user_message = self._convert_input_to_chat_message(request.input)
+            try:
+                # Convert input to proper ChatMessage or string
+                user_message = self._convert_input_to_chat_message(request.input)
 
-            # Get thread from conversation parameter (OpenAI standard!)
-            thread = None
-            conversation_id = request.get_conversation_id()
-            if conversation_id:
-                thread = self.conversation_store.get_thread(conversation_id)
-                if thread:
-                    logger.debug(f"Using existing conversation: {conversation_id}")
+                # Get thread from conversation parameter (OpenAI standard!)
+                thread = None
+                conversation_id = request.get_conversation_id()
+                if conversation_id:
+                    thread = self.conversation_store.get_thread(conversation_id)
+                    if thread:
+                        logger.debug(f"Using existing conversation: {conversation_id}")
+                    else:
+                        logger.warning(f"Conversation {conversation_id} not found, proceeding without thread")
+
+                if isinstance(user_message, str):
+                    logger.debug(f"Executing agent with text input: {user_message[:100]}...")
                 else:
-                    logger.warning(f"Conversation {conversation_id} not found, proceeding without thread")
+                    logger.debug(f"Executing agent with multimodal ChatMessage: {type(user_message)}")
+                agent_kwargs = self._prepare_agent_call_kwargs(request, context)
 
-            if isinstance(user_message, str):
-                logger.debug(f"Executing agent with text input: {user_message[:100]}...")
-            else:
-                logger.debug(f"Executing agent with multimodal ChatMessage: {type(user_message)}")
-            # Check if agent supports streaming
-            if hasattr(agent, "run_stream") and callable(agent.run_stream):
-                # Use Agent Framework's native streaming with optional thread
-                if thread:
-                    async for update in agent.run_stream(user_message, thread=thread):
-                        for trace_event in trace_collector.get_pending_events():
-                            yield trace_event
+                # Check if agent supports streaming
+                if hasattr(agent, "run_stream") and callable(agent.run_stream):
+                    # Use Agent Framework's native streaming with optional thread
+                    if thread:
+                        async for update in agent.run_stream(user_message, thread=thread, **agent_kwargs):
+                            for trace_event in trace_collector.get_pending_events():
+                                yield trace_event
 
-                        yield update
+                            yield update
+                    else:
+                        async for update in agent.run_stream(user_message, **agent_kwargs):
+                            for trace_event in trace_collector.get_pending_events():
+                                yield trace_event
+
+                            yield update
+                elif hasattr(agent, "run") and callable(agent.run):
+                    # Non-streaming agent - use run() and yield complete response
+                    logger.info("Agent lacks run_stream(), using run() method (non-streaming)")
+                    if thread:
+                        response = await agent.run(user_message, thread=thread, **agent_kwargs)
+                    else:
+                        response = await agent.run(user_message, **agent_kwargs)
+
+                    # Yield trace events before response
+                    for trace_event in trace_collector.get_pending_events():
+                        yield trace_event
+
+                    # Yield the complete response (mapper will convert to streaming events)
+                    yield response
                 else:
-                    async for update in agent.run_stream(user_message):
-                        for trace_event in trace_collector.get_pending_events():
-                            yield trace_event
+                    raise ValueError("Agent must implement either run() or run_stream() method")
 
-                        yield update
-            elif hasattr(agent, "run") and callable(agent.run):
-                # Non-streaming agent - use run() and yield complete response
-                logger.info("Agent lacks run_stream(), using run() method (non-streaming)")
-                if thread:
-                    response = await agent.run(user_message, thread=thread)
-                else:
-                    response = await agent.run(user_message)
-
-                # Yield trace events before response
-                for trace_event in trace_collector.get_pending_events():
-                    yield trace_event
-
-                # Yield the complete response (mapper will convert to streaming events)
-                yield response
-            else:
-                raise ValueError("Agent must implement either run() or run_stream() method")
-
-        except Exception as e:
-            logger.error(f"Error in agent execution: {e}")
-            yield {"type": "error", "message": f"Agent execution error: {e!s}"}
+            except Exception as e:
+                logger.error(f"Error in agent execution: {e}")
+                yield {"type": "error", "message": f"Agent execution error: {e!s}"}
+        finally:
+            if token is not None:
+                reset_current_execution_context(token)
 
     async def _execute_workflow(
-        self, workflow: Any, request: AgentFrameworkRequest, trace_collector: Any
+        self,
+        workflow: Any,
+        request: AgentFrameworkRequest,
+        trace_collector: Any,
+        context: ExecutionContext | None = None,
     ) -> AsyncGenerator[Any, None]:
         """Execute Agent Framework workflow with trace collection.
 
@@ -283,33 +309,106 @@ class AgentFrameworkExecutor:
         Yields:
             Workflow events and trace events
         """
+        token = set_current_execution_context(context) if context else None
         try:
-            # Get input data - prefer structured data from extra_body
-            input_data: str | list[Any] | dict[str, Any]
-            if request.extra_body and isinstance(request.extra_body, dict) and request.extra_body.get("input_data"):
-                input_data = request.extra_body.get("input_data")  # type: ignore
-                logger.debug(f"Using structured input_data from extra_body: {type(input_data)}")
-            else:
-                input_data = request.input
-                logger.debug(f"Using input field as fallback: {type(input_data)}")
+            try:
+                # Get input data - prefer structured data from extra_body
+                input_data: str | list[Any] | dict[str, Any]
+                if request.extra_body and isinstance(request.extra_body, dict) and request.extra_body.get("input_data"):
+                    input_data = request.extra_body.get("input_data")  # type: ignore
+                    logger.debug(f"Using structured input_data from extra_body: {type(input_data)}")
+                else:
+                    input_data = request.input
+                    logger.debug(f"Using input field as fallback: {type(input_data)}")
 
-            # Parse input based on workflow's expected input type
-            parsed_input = await self._parse_workflow_input(workflow, input_data)
+                # Parse input based on workflow's expected input type
+                parsed_input = await self._parse_workflow_input(workflow, input_data)
 
-            logger.debug(f"Executing workflow with parsed input type: {type(parsed_input)}")
+                logger.debug(f"Executing workflow with parsed input type: {type(parsed_input)}")
 
-            # Use Agent Framework workflow's native streaming
-            async for event in workflow.run_stream(parsed_input):
-                # Yield any pending trace events first
-                for trace_event in trace_collector.get_pending_events():
-                    yield trace_event
+                runner = getattr(workflow, "_runner", None)
+                runner_context = getattr(runner, "context", None) if runner else None
+                shared_state = getattr(workflow, "_shared_state", None)
 
-                # Then yield the workflow event
-                yield event
+                context_attached = False
+                shared_state_set = False
 
-        except Exception as e:
-            logger.error(f"Error in workflow execution: {e}")
-            yield {"type": "error", "message": f"Workflow execution error: {e!s}"}
+                if context:
+                    if runner_context is not None:
+                        try:
+                            setattr(runner_context, EXECUTION_CONTEXT_ATTR, context)
+                            context_attached = True
+                        except Exception as exc:  # best effort
+                            logger.debug(f"Unable to attach execution context to workflow runner: {exc}")
+
+                    if shared_state is not None:
+                        metadata_payload = context.to_metadata()
+                        if metadata_payload:
+                            try:
+                                await shared_state.set(EXECUTION_CONTEXT_SHARED_STATE_KEY, metadata_payload)
+                                shared_state_set = True
+                            except Exception as exc:
+                                logger.debug(f"Unable to store execution context metadata in workflow shared state: {exc}")
+
+                try:
+                    # Use Agent Framework workflow's native streaming
+                    async for event in workflow.run_stream(parsed_input):
+                        # Yield any pending trace events first
+                        for trace_event in trace_collector.get_pending_events():
+                            yield trace_event
+
+                        # Then yield the workflow event
+                        yield event
+                finally:
+                    if context_attached and runner_context is not None:
+                        try:
+                            delattr(runner_context, EXECUTION_CONTEXT_ATTR)
+                        except AttributeError:
+                            pass
+                        except Exception as exc:
+                            logger.debug(f"Unable to detach execution context from workflow runner: {exc}")
+
+                    if shared_state_set and shared_state is not None:
+                        try:
+                            await shared_state.delete(EXECUTION_CONTEXT_SHARED_STATE_KEY)
+                        except KeyError:
+                            pass
+                        except Exception as exc:
+                            logger.debug(f"Unable to clear execution context metadata from workflow shared state: {exc}")
+
+            except Exception as e:
+                logger.error(f"Error in workflow execution: {e}")
+                yield {"type": "error", "message": f"Workflow execution error: {e!s}"}
+        finally:
+            if token is not None:
+                reset_current_execution_context(token)
+
+    def _prepare_agent_call_kwargs(
+        self, request: AgentFrameworkRequest, context: ExecutionContext | None
+    ) -> dict[str, Any]:
+        """Create kwargs for agent.run / agent.run_stream including metadata + tool context."""
+        agent_kwargs: dict[str, Any] = {}
+
+        metadata = dict(request.metadata or {})
+
+        if context:
+            context_metadata = context.to_metadata()
+            if context_metadata:
+                existing = metadata.get("authenticated_user")
+                if isinstance(existing, dict):
+                    existing.update(context_metadata)
+                else:
+                    metadata["authenticated_user"] = context_metadata
+
+        if metadata:
+            agent_kwargs["metadata"] = metadata
+
+        if context:
+            user_identifier = context.user_identifier()
+            if user_identifier:
+                agent_kwargs.setdefault("user", user_identifier)
+
+        return agent_kwargs
 
     def _convert_input_to_chat_message(self, input_data: Any) -> Any:
         """Convert OpenAI Responses API input to Agent Framework ChatMessage or string.
