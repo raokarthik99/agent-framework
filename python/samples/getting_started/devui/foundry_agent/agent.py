@@ -39,8 +39,14 @@ def get_weather(
     temperature = 22
 
     identity = _format_user_identity()
-    personalization = f"{identity}, here's your personalized update. " if identity else ""
-    delegated_note = " (delegated access token available for downstream APIs)" if _has_delegated_token() else ""
+    personalization = (
+        f"{identity}, here's your personalized update. " if identity else ""
+    )
+    delegated_note = (
+        " (delegated access token available for downstream APIs)"
+        if _has_delegated_token()
+        else ""
+    )
 
     return (
         f"{personalization}"
@@ -50,7 +56,9 @@ def get_weather(
 
 
 def get_forecast(
-    location: Annotated[str, Field(description="The location to get the forecast for.")],
+    location: Annotated[
+        str, Field(description="The location to get the forecast for.")
+    ],
     days: Annotated[int, Field(description="Number of days for forecast")] = 3,
 ) -> str:
     """Get weather forecast for multiple days."""
@@ -70,15 +78,18 @@ def get_forecast(
         else ""
     )
 
-    return intro + f"Weather forecast for {location}:\n" + "\n".join(forecast) + delegated_note
+    return (
+        intro
+        + f"Weather forecast for {location}:\n"
+        + "\n".join(forecast)
+        + delegated_note
+    )
 
 
 # Agent instance following Agent Framework conventions
 agent = ChatAgent(
     name="FoundryWeatherAgent",
     chat_client=AzureAIAgentClient(
-        project_endpoint=os.environ.get("AZURE_AI_PROJECT_ENDPOINT"),
-        model_deployment_name=os.environ.get("FOUNDRY_MODEL_DEPLOYMENT_NAME"),
         async_credential=AzureCliCredential(),
     ),
     instructions="""
