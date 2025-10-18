@@ -123,11 +123,11 @@ def main():
     logger = logging.getLogger(__name__)
 
     logger.info("Starting Azure Weather Agent")
-    logger.info("Available at: http://localhost:8090")
+    logger.info("Available at: http://localhost:8080")
     logger.info("Entity ID: agent_AzureWeatherAgent")
 
     # Launch server with the agent
-    serve(entities=[agent], port=8090, auto_open=True)
+    serve(entities=[agent], port=8080, auto_open=True)
 
 
 if __name__ == "__main__":

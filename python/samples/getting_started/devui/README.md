@@ -46,7 +46,7 @@ cd python/samples/getting_started/devui
 python in_memory_mode.py
 ```
 
-This opens your browser at http://localhost:8090 with pre-configured agents and a basic workflow.
+This opens your browser at http://localhost:8080 with pre-configured agents and a basic workflow.
 
 ### Option 2: Directory Discovery
 
@@ -74,23 +74,23 @@ agent_name/
 
 ### Agents
 
-| Sample                                           | Description                                                                                       | Features                                                                   | Required Environment Variables                                                                     |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| [**weather_agent_azure/**](weather_agent_azure/) | Weather agent using Azure OpenAI with API key authentication                                      | Azure OpenAI integration, function calling, mock weather tools             | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME`, `AZURE_OPENAI_ENDPOINT`              |
-| [**foundry_agent/**](foundry_agent/)             | Weather agent using Azure AI Agent (Foundry) with Azure CLI authentication (run `az login` first) | Azure AI Agent integration, Azure CLI authentication, mock weather tools   | `AZURE_AI_PROJECT_ENDPOINT`, `FOUNDRY_MODEL_DEPLOYMENT_NAME`                                       |
+| Sample                                           | Description                                                                                       | Features                                                                 | Required Environment Variables                                                       |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| [**weather_agent_azure/**](weather_agent_azure/) | Weather agent using Azure OpenAI with API key authentication                                      | Azure OpenAI integration, function calling, mock weather tools           | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME`, `AZURE_OPENAI_ENDPOINT` |
+| [**foundry_agent/**](foundry_agent/)             | Weather agent using Azure AI Agent (Foundry) with Azure CLI authentication (run `az login` first) | Azure AI Agent integration, Azure CLI authentication, mock weather tools | `AZURE_AI_PROJECT_ENDPOINT`, `FOUNDRY_MODEL_DEPLOYMENT_NAME`                         |
 
 ### Workflows
 
-| Sample                                       | Description                                                       | Features                                                                                                                    | Required Environment Variables                                                        |
-| -------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| [**workflow_agents/**](workflow_agents/)     | Content review workflow with agents as executors                  | Agents as workflow nodes, conditional routing based on structured outputs, quality-based paths (Writer → Reviewer → Editor/Publisher) | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME`, `AZURE_OPENAI_ENDPOINT` |
-| [**spam_workflow/**](spam_workflow/)         | 5-step email spam detection workflow with branching logic         | Sequential execution, conditional branching (spam vs. legitimate), multiple executors, mock spam detection                  | None - uses mock data                                                                 |
-| [**fanout_workflow/**](fanout_workflow/)     | Advanced data processing workflow with parallel execution         | Fan-out/fan-in patterns, complex state management, multi-stage processing (validation → transformation → quality assurance) | None - uses mock data                                                                 |
+| Sample                                   | Description                                               | Features                                                                                                                              | Required Environment Variables                                                       |
+| ---------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| [**workflow_agents/**](workflow_agents/) | Content review workflow with agents as executors          | Agents as workflow nodes, conditional routing based on structured outputs, quality-based paths (Writer → Reviewer → Editor/Publisher) | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME`, `AZURE_OPENAI_ENDPOINT` |
+| [**spam_workflow/**](spam_workflow/)     | 5-step email spam detection workflow with branching logic | Sequential execution, conditional branching (spam vs. legitimate), multiple executors, mock spam detection                            | None - uses mock data                                                                |
+| [**fanout_workflow/**](fanout_workflow/) | Advanced data processing workflow with parallel execution | Fan-out/fan-in patterns, complex state management, multi-stage processing (validation → transformation → quality assurance)           | None - uses mock data                                                                |
 
 ### Standalone Examples
 
-| Sample                                     | Description                                                               | Features                                                                                                                        |
-| ------------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Sample                                     | Description                                                               | Features                                                                                                                                     |
+| ------------------------------------------ | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | [**in_memory_mode.py**](in_memory_mode.py) | Demonstrates programmatic entity registration without directory structure | In-memory agent and workflow registration, multiple entities served from a single file, includes basic workflow, simplest way to get started |
 
 ## Environment Variables
@@ -173,7 +173,7 @@ curl http://localhost:8080/v1/entities
 pip install -e ../../../packages/devui
 ```
 
-**Port conflicts**: DevUI uses ports 8080 (directory mode) and 8090 (in-memory mode) by default. Close other services or specify a different port:
+**Port conflicts**: DevUI uses ports 8080 (directory mode) and 8080 (in-memory mode) by default. Close other services or specify a different port:
 
 ```bash
 devui --port 8888

@@ -105,13 +105,13 @@ def main():
     # Collect entities for serving
     entities = [weather_agent, simple_agent, basic_workflow]
 
-    logger.info("Starting DevUI on http://localhost:8090")
+    logger.info("Starting DevUI on http://localhost:8080")
     logger.info("Entities available:")
     logger.info("  - Agents: weather-assistant, general-assistant")
     logger.info("  - Workflow: basic text transformer (uppercase + exclamation)")
 
     # Launch server with auto-generated entity IDs
-    serve(entities=entities, port=8090, auto_open=True)
+    serve(entities=entities, port=8080, auto_open=True)
 
 
 if __name__ == "__main__":
