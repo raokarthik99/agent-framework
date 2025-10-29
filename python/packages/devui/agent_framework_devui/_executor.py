@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 class EntityNotFoundError(Exception):
     """Raised when an entity is not found."""
-
     pass
 
 
@@ -65,7 +64,12 @@ class AgentFrameworkExecutor:
             from opentelemetry.sdk.trace import TracerProvider
 
             # Only set up if no provider exists yet
-            if not hasattr(trace, "_TRACER_PROVIDER") or trace._TRACER_PROVIDER is None:
+            try:
+                provider_exists = trace.get_tracer_provider() is not None
+            except Exception:
+                provider_exists = False
+
+            if not provider_exists:
                 resource = Resource.create({
                     "service.name": "agent-framework-server",
                     "service.version": "1.0.0",
@@ -457,10 +461,9 @@ class AgentFrameworkExecutor:
                                     image_url = content_item.get("image_url", "")
                                     if image_url:
                                         # Extract media type from data URI if possible
-                                        # Parse media type from data URL, fallback to image/png
                                         if image_url.startswith("data:"):
                                             try:
-                                                # Extract media type from data:image/jpeg;base64,... format
+                                                # data:image/jpeg;base64,...
                                                 media_type = image_url.split(";")[0].split(":")[1]
                                             except (IndexError, AttributeError):
                                                 logger.warning(
