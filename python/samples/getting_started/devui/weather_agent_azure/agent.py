@@ -12,6 +12,7 @@ from agent_framework import (
     ChatResponse,
     FunctionInvocationContext,
     Role,
+    ai_function,
     chat_middleware,
     function_middleware,
 )
@@ -70,6 +71,7 @@ async def atlantis_location_filter_middleware(
     await next(context)
 
 
+@ai_function(approval_mode="always_require")
 def get_weather(
     location: Annotated[str, "The location to get the weather for."],
 ) -> str:
@@ -108,7 +110,8 @@ agent = ChatAgent(
         credential=AzureCliCredential()
     ),
     tools=[get_weather, get_forecast],
-    middleware=[security_filter_middleware, atlantis_location_filter_middleware],
+    middleware=[security_filter_middleware,
+                atlantis_location_filter_middleware],
 )
 
 
