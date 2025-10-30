@@ -5,14 +5,10 @@ This agent uses Azure AI Foundry with Azure CLI authentication.
 Make sure to run 'az login' before starting devui.
 """
 
-import os
-from typing import Annotated
-
 from agent_framework import ChatAgent, HostedMCPTool
 from agent_framework.devui import get_current_execution_context
 from agent_framework.azure import AzureAIAgentClient
 from azure.identity.aio import AzureCliCredential
-from pydantic import Field
 
 
 # region personalization helpers
