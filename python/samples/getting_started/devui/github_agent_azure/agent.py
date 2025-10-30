@@ -19,6 +19,7 @@ from azure.identity import AzureCliCredential
 # Load environment variables
 load_dotenv()
 
+
 async def main():
     """Main async function that sets up the GitHub agent with MCP integration."""
     chat_client = AzureOpenAIChatClient(
@@ -35,19 +36,20 @@ async def main():
         url="https://api.githubcopilot.com/mcp/",
         headers={"Authorization": f"Bearer {github_pat}"},
         chat_client=chat_client,
-    ) as mcp:
+    ) as github_mcp_tool:
         agent = ChatAgent(
             chat_client=chat_client,
             name="GitHubAgentAzure",
             instructions="You are a helpful assistant that can help users interact with GitHub using available MCP tools. Use the GitHub MCP tools to perform various GitHub operations like searching repositories, managing issues, working with pull requests, and more.",
-            tools=list(mcp.functions),
+            tools=[github_mcp_tool]
         )
 
         server = DevServer(host="localhost", port=8080, ui_enabled=True)
         server.register_entities([agent])
         app = server.get_app()
 
-        config = uvicorn.Config(app, host="localhost", port=8080, log_level="info", loop="asyncio")
+        config = uvicorn.Config(app, host="localhost",
+                                port=8080, log_level="info", loop="asyncio")
         await uvicorn.Server(config).serve()
 
 
